@@ -1,0 +1,1 @@
+# wind_blade_fault_detector
