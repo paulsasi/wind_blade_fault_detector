@@ -84,6 +84,18 @@ The following are the raw datasets that the client has sent us:
 
     Comment: ds-02 and the reports merged (and duplicates removed). All kinds of images with a lot of noise (not only faults).
 
+
+  
+   Name: d-04
+
+    Date: 18 March 2021
+
+    Size: 17649 images (variable resolution)
+
+    Classified: No
+
+    Comment: ds-02, the old reports and new reports merged (and duplicates removed). All kinds of images with a lot of noise (not only faults).
+
 ###  Image classification
 
 The available d-00 dataset is relatively small. The ds-00 consists of less than 100 images with damages. The images are unclassified.
@@ -376,6 +388,131 @@ Based on the images provided to us in the reports, damages located in the 'aerof
 
 
 
-###  <u>DEMO</u>
+###  <u>LOCAL DEMO</u>
 
-A toy demo has been constructed to show how all the models come to play together in a 'real' prediction tool. First, the model from test 4 is used to classify the location of the image. Then, the 'aerofreno' images are croped into 9 sub-images and classified usign the model obtained in test 5. The rest of the images are croped and classified using the model from test 3. In summary, the input of the complete model is an image, and the output are the localziation and the classification of each crom as 'n-a' and 'damaged'. In the demo, the 'damaged' crops are highlighted with a red quare. A green frame is added to the complete image if all the crops are 'n-a'. THe code can be found in the following repo: https://github.com/paulsasi/demo_windclass.git  
+
+
+A toy demo has been constructed to show how all the models come to play together in a 'real' prediction tool. First, the model from test 4 is used to classify the location of the image. Then, the 'aerofreno' images are croped into 9 sub-images and classified usign the model obtained in test 5. The rest of the images are croped and classified using the model from test 3. In summary, the input of the complete model is an image, and the output are the localziation and the classification of each crom as 'n-a' and 'damaged'. In the demo, the 'damaged' crops are highlighted with a red quare. A green frame is added to the complete image if all the crops are 'n-a'. The code can be found in the ```/demo/demo_local``` directory.
+
+
+###  <u>GCP DEMO</u>
+
+A little web app has been constructed using Python and Flask. The goal was to host the models in the GCP AI platform, and get online requests using the API provided by AI Platform. The code can be found in the ```/demo/demo_gcp``` directory. 
+
+### LOCALIZATION MODEL 1.0
+
+Based on the second batch of reports, we already have a decent amount of images to do real tests. The goal is to design a model with the ability to localize the images in the blade. The first step consisted on merging ds-02, old report images and new report images into one directory. Then, they were manually labeled into eight classes: borde (edge), pieza (piece), raíz(root), aerodinámico (aerodinamic), punta (tip), aerofreno(airbrake), completo (complete) and zoom (zoom). Remark that the eight locations were chosen by me. 
+
+
+
+  <p align="center">
+    <img src="./images/localization-ds.png" width=900 />
+  </p>
+
+
+
+Then, the set of images was randomly splited into train and valdiation set (80%-20%). This dataset is called localization-ds (I call it like that because it is the first real dataset, previous ones were for testing). The dataset has been uplaoded to Xabet Google Cloud. The following is the localization dataset structure:
+
+    1. Train 13569
+
+      1.1 Borde
+
+      1.2 Punta
+
+      1.3 Aerodinámico
+
+      1.4 Completo
+
+      1.5 Raíz
+
+      1.6 Aerofreno
+
+      1.7 Zoom
+
+      1.8 Pieza
+
+       
+    2. Validation 3396
+
+      2.1 Borde
+
+      2.2 Punta
+
+      2.3 Aerodinámico
+
+      2.4 Completo
+
+      2.5 Raíz
+
+      2.6 Aerofreno
+
+      2.7 Zoom
+
+      2.8 Pieza
+ 
+
+
+Due to hardware limitations, to reach a decent training time the resolution was downgraded to 150x150 (224x224 was also tryed but max batch size that COalb was reach was 2, and training took too long). With a 150x150 resolution, I was able to use a batch size of 32 in Colab (15GB of RAM).  The model has been selected based on the knowledge gained on the test 4, using tranfer learning with ResNet50 as backbone model doing a fine tuning phase after a fixed epoch. The following are the model hyperparmeters:IMG_SIZE, Backbone model, Batch size, Initial learning rate, Loss function, Optmizer, Frozen_epochs, Unfrozen_epochs, Unfrozen_layers, Learning rate decrease ratio, Dropout ratio. 
+
+
+The hyperparameter tuning has been realized using a greedy/random aproach. Basically, different values has been selected and the value of the accuracy has been observed. Each training took around 15-30 minutes (depending on the number of epochs), and doing a grid-search was unfeasible. The folowing is the final model that obtained the highest accuracy on the validation set
+
+
+  1. IMG_SIZE = (150, 150)
+
+  2. Backbone model = Resnet50 (Imagenet weights)
+
+  3. Batch size = 32
+
+  4. Initial learning rate = 0.001
+
+  5. Loss function = SparseCategoricalCrosEntropy
+
+  6. Optimizer = Adam
+
+  7. Frozen_epochs = 30
+
+  8. Unfrozen_epochs = 50
+
+  9. Learning rate decrease ratio = 100
+
+  10. Unfrozen_layers = 100
+
+  11. Dropout ratio = 0.5
+
+
+The model has a vector of size 8 as output, and the predicted class is obtained using the argmax function. The following is the train/val accuracy plot:
+
+<p align="center">
+    <img src="./images/localization.png" width=600 />
+  </p>
+      
+The obtained accuracy is ~96.5%, and the following is the obtained confusion matrix on the validation set.
+
+| True/Predicted     | Aerodinamico     | Aerofreno     | Borde | Competo | Pieza | Punta | Raiz | Zoom | PERCENTAGE OF CORRECT PREDICTIONS
+| :------------- | :----------: | :-----------: | :------:|  :-------: | :------: |:------: |:------: | :------: | :------: 
+|  Aerodinamico |  183 |  0 | 6 | 0|  0 | 1 | 0 | 5 | 93.8
+|  Aerofreno | 0 |  125 | 0 | 0|  0 | 1 | 0 | 0 | 99.2
+|  Borde| 8 |  0 | 1763 | 0|  0 | 18 | 3 | 6 | 98.0
+   Completo | 0 |  0 | 0 | 183|  0 | 4 | 5 | 0 | 95.3
+|  Pieza | 0 |  0 | 0 | 0|  29 | 0 | 0 | 0 | 100
+|  Punta | 3 |  0 | 24 | 2|  0 | 717 | 1 | 3 | 95.6
+   Raiz | 0 |  0 | 2 | 3|  0 | 2 | 178 | 0 |96.2
+   Zoom | 0 |  0 | 9 | 0|  0 | 0 | 0 | 108 | 92.3
+
+
+The Google Colab Notebook used to train the localization model can be found in ```/local_test/localization-setup```.
+
+
+Remark that the data imbalance is a present challengue in this dataset. It can be observed that the ZOOM class has the lowest preiction percentage, despite being very different from the rest (all white images). Future work involves using techniques to solve this issue and increase accuracy. 
+
+The following are intermedate representations of the neural network, just for visualization purpose:
+
+
+ <p align="center">
+    <img src="./images/localization-intermediate1.png" width=600 />
+  </p>
+
+  <p align="center">
+    <img src="./images/localization-intermediate2.png" width=600 />
+  </p>
